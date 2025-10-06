@@ -43,7 +43,7 @@ export default function Overview() {
       {/* Beautiful Welcome Header */}
       <div className="text-center mb-8">
         <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-4">
-          🏆 Welcome, Coach!
+          Welcome, Coach!
         </h1>
         <p className="text-xl text-gray-600 mb-6">Your AI-powered team management dashboard</p>
         <div className="flex justify-center space-x-1 mb-6">
@@ -121,26 +121,26 @@ export default function Overview() {
         <Card className="bg-gradient-to-br from-indigo-50 to-purple-100 border-2 border-indigo-200 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-indigo-800">
-              <Target className="w-6 h-6" /> ⚡ Quick Actions
+              <Target className="w-6 h-6" /> Quick Actions
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <Link to="/players">
               <Button className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white mb-2">
                 <Users className="w-4 h-4 mr-2" />
-                👥 Manage Players
+                Manage Players
               </Button>
             </Link>
             <Link to="/formations">
               <Button className="w-full bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white mb-2">
                 <Brain className="w-4 h-4 mr-2" />
-                🧠 AI Formation Optimizer  
+                AI Formation Optimizer
               </Button>
             </Link>
             <Link to="/training">
               <Button className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white">
                 <Shield className="w-4 h-4 mr-2" />
-                🎯 AI Training Plans
+                AI Training Plans
               </Button>
             </Link>
           </CardContent>
@@ -149,7 +149,7 @@ export default function Overview() {
         <Card className="bg-gradient-to-br from-blue-50 to-cyan-100 border-2 border-blue-200 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-blue-800">
-              <Brain className="w-6 h-6" /> 🤖 AI Coach Tips
+              <Brain className="w-6 h-6" /> AI Coach Tips
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -170,7 +170,7 @@ export default function Overview() {
                 <p className="text-blue-700 mb-4">Add players to get AI recommendations!</p>
                 <Link to="/players">
                   <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white">
-                    ✨ Add Your First Player
+                    Add Your First Player
                   </Button>
                 </Link>
               </div>
@@ -183,7 +183,7 @@ export default function Overview() {
       <div className="space-y-6">
         <div className="text-center">
           <h2 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
-            🤖 AI-Powered Analytics Dashboard
+            AI-Powered Analytics Dashboard
           </h2>
           <p className="text-gray-600">Professional-grade data insights for your team</p>
         </div>
@@ -209,7 +209,7 @@ export default function Overview() {
         <Card className="bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-gray-200 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-gray-800">
-              <BarChart3 className="w-6 h-6" /> 📊 Team Activity
+              <BarChart3 className="w-6 h-6" /> Team Activity
             </CardTitle>
           </CardHeader>
           <CardContent>

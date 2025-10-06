@@ -337,7 +337,7 @@ export default function TrainingPage() {
   const players = currentUser?.players || [];
 
   const [drill, setDrill] = useState("chase"); // chase or shuttle
-  const [selectedPlayerIds, setSelectedPlayerIds] = useState(Array(11).fill(""));
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState(Array(2).fill(""));
   const [isRunning, setIsRunning] = useState(false);
   const [paused, setPaused] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -447,9 +447,11 @@ function buildSlalomForPlayer(laneY) {
       slalomDoneRef.current = {};
       slalomTimeRef.current = {};
 
-      selectedPlayers.forEach((player, index) => {
+      // Only use the first player for slalom
+      const player = selectedPlayers[0];
+      if (player) {
         const b = pickBase(player.role || player.position, player);
-        const laneY = PITCH_H * 0.2 + (index / Math.max(1, selectedPlayers.length - 1)) * PITCH_H * 0.6;
+        const laneY = PITCH_H * 0.5; // Center the course
 
         stateRef.current[player.id] = {
           pos: { x: SLALOM_START_X - 5, y: laneY },
@@ -461,7 +463,7 @@ function buildSlalomForPlayer(laneY) {
         slalomErrRef.current[player.id] = 0;
         slalomDoneRef.current[player.id] = false;
         slalomTimeRef.current[player.id] = 0;
-      });
+      }
     }
 
     else {
@@ -495,9 +497,10 @@ function buildSlalomForPlayer(laneY) {
   }
 
   function endAndFeedback() {
-    const p1 = players.find((p) => p.id === player1Id);
-    const p2 = players.find((p) => p.id === player2Id);
-    if (!p1 || !p2) return;
+    // Get the actual selected players
+    const selectedPlayers = selectedPlayerIds.filter(id => id !== "").map(id => players.find(p => p.id === id)).filter(Boolean);
+
+    if (selectedPlayers.length === 0) return;
 
     // Analyze precise tracking data first
     analyzePreciseData();
@@ -505,71 +508,174 @@ function buildSlalomForPlayer(laneY) {
     const now = performance.now();
     const elapsedS = Math.max(1, (now - startTimeRef.current) / 1000);
 
-    const s1 = stateRef.current[p1.id];
-    const s2 = stateRef.current[p2.id];
-    const precise1 = preciseStatsRef.current[p1.id] || {};
-    const precise2 = preciseStatsRef.current[p2.id] || {};
-
-    const avg1 = precise1.avg_speed_mps || 0;
-    const avg2 = precise2.avg_speed_mps || 0;
-    const dist1 = precise1.distance_m || 0;
-    const dist2 = precise2.distance_m || 0;
-
-    const lines = [
-      `${p1.name} distance ${Math.round(dist1)} m avg speed ${avg1.toFixed(2)} m/s ` +
-      `max ${(precise1.p95_speed_mps || precise1.max_speed_mps || 0).toFixed(2)} m/s ` +
-      `sprints ${precise1.sprint_count ?? 0}${drill === "shuttle" ? ` reps ${s1.reps || 0}` : ""} [PRECISE]`,
-      `${p2.name} distance ${Math.round(dist2)} m avg speed ${avg2.toFixed(2)} m/s ` +
-      `max ${(precise2.p95_speed_mps || precise2.max_speed_mps || 0).toFixed(2)} m/s ` +
-      `sprints ${precise2.sprint_count ?? 0}${drill === "shuttle" ? ` reps ${s2.reps || 0}` : ""} [PRECISE]`,
-    ];
-
-    function fb(name, avg, maxp, distM, reps) {
-      if (drill === "shuttle" && reps < 20)
-        return `${name} needs more repeatability. Aim for plus two shuttles next session.`;
-      if (avg < 2.6)
-        return `${name} needs to raise steady pace. Target average above two point eight.`;
-      if (maxp > 6.5 && avg < 2.9)
-        return `${name} has good top speed. Improve endurance to hold pace longer.`;
-      if (distM > 1800 && avg >= 3.0)
-        return `${name} delivered a strong aerobic load today. Keep recovery solid.`;
-      return `${name} completed the session.`;
-    }
-    const coach = [
-      fb(p1.name, avg1, precise1.p95_speed_mps || 0, dist1, s1.reps || 0),
-      fb(p2.name, avg2, precise2.p95_speed_mps || 0, dist2, s2.reps || 0),
-    ];
-
-    // Calculate Player Development
+    // Initialize lines and coach arrays
+    let lines = [];
+    let coach = [];
     const playerDevelopment = [];
-    
-    if (avg1 > 0) { // Only if we have valid precise data
-      const updatedP1 = updatePlayerWithNewMatch(p1, avg1);
-      playerDevelopment.push({
-        name: p1.name,
-        oldRating: p1.speed || 0,
-        newRating: updatedP1.speed,
-        performanceSpeed: avg1,
-        matchesPlayed: updatedP1.matchesPlayed,
-        change: updatedP1.speed - (p1.speed || 0),
-        isNew: !p1.speed || p1.speed === 0
-      });
-    }
 
-    if (avg2 > 0) { // Only if we have valid precise data
-      const updatedP2 = updatePlayerWithNewMatch(p2, avg2);
-      playerDevelopment.push({
-        name: p2.name,
-        oldRating: p2.speed || 0,
-        newRating: updatedP2.speed,
-        performanceSpeed: avg2,
-        matchesPlayed: updatedP2.matchesPlayed,
-        change: updatedP2.speed - (p2.speed || 0),
-        isNew: !p2.speed || p2.speed === 0
-      });
+    // Handle slalom drill differently
+    if (drill === "slalom") {
+      const p1 = selectedPlayers[0];
+      if (!p1) return;
+
+      const s1 = stateRef.current[p1.id];
+      const precise1 = preciseStatsRef.current[p1.id] || {};
+
+      const progress1 = slalomProgRef.current[p1.id] ?? 0;
+      const time1 = slalomTimeRef.current[p1.id] ?? 0;
+      const errors1 = slalomErrRef.current[p1.id] ?? 0;
+
+      const avg1 = precise1.avg_speed_mps || 0;
+      const dist1 = precise1.distance_m || 0;
+
+      // Slalom summary line
+      lines.push(
+        `${p1.name} - Slalom Result: Cleared ${progress1}/${SLALOM_GATES} gates in ${time1.toFixed(2)}s`
+      );
+      lines.push(
+        `${p1.name} - distance ${Math.round(dist1)} m, avg speed ${avg1.toFixed(2)} m/s, ` +
+        `max ${(precise1.p95_speed_mps || precise1.max_speed_mps || 0).toFixed(2)} m/s`
+      );
+
+      // Slalom-specific feedback
+      coach.push(getSlalomFeedback({
+        name: p1.name,
+        progress: progress1,
+        time: time1,
+        errors: errors1
+      }));
+
+      // Player development for slalom (using speed attribute)
+      if (avg1 > 0) {
+        const updatedP1 = updatePlayerWithNewMatch(p1, avg1);
+        playerDevelopment.push({
+          name: p1.name,
+          oldRating: p1.speed || 0,
+          newRating: updatedP1.speed,
+          performanceSpeed: avg1,
+          matchesPlayed: updatedP1.matchesPlayed,
+          change: updatedP1.speed - (p1.speed || 0),
+          isNew: !p1.speed || p1.speed === 0
+        });
+      }
+
+    } else {
+      // Handle chase and shuttle drills (2 players)
+      const p1 = selectedPlayers[0];
+      const p2 = selectedPlayers[1];
+
+      if (!p1 || !p2) return;
+
+      const s1 = stateRef.current[p1.id];
+      const s2 = stateRef.current[p2.id];
+      const precise1 = preciseStatsRef.current[p1.id] || {};
+      const precise2 = preciseStatsRef.current[p2.id] || {};
+
+      const avg1 = precise1.avg_speed_mps || 0;
+      const avg2 = precise2.avg_speed_mps || 0;
+      const dist1 = precise1.distance_m || 0;
+      const dist2 = precise2.distance_m || 0;
+
+      // Summary lines for both players
+      lines = [
+        `${p1.name} distance ${Math.round(dist1)} m avg speed ${avg1.toFixed(2)} m/s ` +
+        `max ${(precise1.p95_speed_mps || precise1.max_speed_mps || 0).toFixed(2)} m/s ` +
+        `sprints ${precise1.sprint_count ?? 0}${drill === "shuttle" ? ` reps ${s1.reps || 0}` : ""} [PRECISE]`,
+        `${p2.name} distance ${Math.round(dist2)} m avg speed ${avg2.toFixed(2)} m/s ` +
+        `max ${(precise2.p95_speed_mps || precise2.max_speed_mps || 0).toFixed(2)} m/s ` +
+        `sprints ${precise2.sprint_count ?? 0}${drill === "shuttle" ? ` reps ${s2.reps || 0}` : ""} [PRECISE]`,
+      ];
+
+      // General fitness feedback function
+      function fb(name, avg, maxp, distM, reps) {
+        if (drill === "shuttle" && reps < 20)
+          return `${name} needs more repeatability. Aim for plus two shuttles next session.`;
+        if (avg < 2.6)
+          return `${name} needs to raise steady pace. Target average above two point eight.`;
+        if (maxp > 6.5 && avg < 2.9)
+          return `${name} has good top speed. Improve endurance to hold pace longer.`;
+        if (distM > 1800 && avg >= 3.0)
+          return `${name} delivered a strong aerobic load today. Keep recovery solid.`;
+        return `${name} completed the session.`;
+      }
+
+      coach = [
+        fb(p1.name, avg1, precise1.p95_speed_mps || 0, dist1, s1.reps || 0),
+        fb(p2.name, avg2, precise2.p95_speed_mps || 0, dist2, s2.reps || 0),
+      ];
+
+      // Player development for both players
+      if (avg1 > 0) {
+        const updatedP1 = updatePlayerWithNewMatch(p1, avg1);
+        playerDevelopment.push({
+          name: p1.name,
+          oldRating: p1.speed || 0,
+          newRating: updatedP1.speed,
+          performanceSpeed: avg1,
+          matchesPlayed: updatedP1.matchesPlayed,
+          change: updatedP1.speed - (p1.speed || 0),
+          isNew: !p1.speed || p1.speed === 0
+        });
+      }
+
+      if (avg2 > 0) {
+        const updatedP2 = updatePlayerWithNewMatch(p2, avg2);
+        playerDevelopment.push({
+          name: p2.name,
+          oldRating: p2.speed || 0,
+          newRating: updatedP2.speed,
+          performanceSpeed: avg2,
+          matchesPlayed: updatedP2.matchesPlayed,
+          change: updatedP2.speed - (p2.speed || 0),
+          isNew: !p2.speed || p2.speed === 0
+        });
+      }
     }
 
     setFeedback({ lines, coach, playerDevelopment });
+  }
+
+  // Helper function for slalom feedback
+  function getSlalomFeedback({ name, progress, time, errors }) {
+    const totalGates = SLALOM_GATES;
+    const completionRate = progress / totalGates;
+
+    // Incomplete - stopped early (less than 50%)
+    if (completionRate < 0.5) {
+      return `${name}, the run stopped early at Gate ${progress} of ${totalGates}. Focus on consistency and concentration. Try mastering the first 4 cones before attempting the full course.`;
+    }
+
+    // Incomplete - stopped near the end (50%-99%)
+    if (progress < totalGates) {
+      return `${name}, great effort reaching Gate ${progress}. You broke down near the end - often a sign of endurance issues. Focus on maintaining high speed and precision during the final cones.`;
+    }
+
+    // Complete but slow (adjust threshold based on testing)
+    if (time > 15.0) {
+      return `${name}, you completed the course in ${time.toFixed(2)}s. Good control, but the pace is cautious. Focus on taking fewer, stronger touches to attack the space between cones.`;
+    }
+
+    // Complete and fast
+    if (time < 10.0) {
+      return `${name}, brilliant time of ${time.toFixed(2)}s! Excellent pace. Review your path to ensure you're not taking wide turns - next step is to minimize travel distance.`;
+    }
+
+    // Default - completed in acceptable time
+    return `${name} completed the slalom successfully in ${time.toFixed(2)}s. Keep practicing to improve your time!`;
+  }
+
+  // Analyze precise tracking data
+  function analyzePreciseData() {
+    const selectedPlayers = selectedPlayerIds.filter(id => id !== "").map(id => players.find(p => p.id === id)).filter(Boolean);
+
+    // Calculate precise metrics for each selected player
+    selectedPlayers.forEach(player => {
+      const buffer = positionBuffersRef.current[player.id];
+      if (buffer && buffer.t.length > 1) {
+        const preciseStats = computeMetricsFromMeters(buffer.t, buffer.x, buffer.y);
+        preciseStatsRef.current[player.id] = preciseStats;
+      }
+    });
   }
 
   // Helper function to add missing attributes to existing players
@@ -804,6 +910,40 @@ function buildSlalomForPlayer(laneY) {
           }
         });
         // ball stays put
+      } else if (drill === "slalom") {
+        // slalom drill - player weaves through cones
+        selectedPlayers.forEach((p) => {
+          const s = ps[p.id];
+          if (s && !slalomDoneRef.current[p.id]) {
+            const gates = slalomGatesRef.current[p.id];
+            const currentGateIdx = slalomProgRef.current[p.id];
+
+            if (currentGateIdx < gates.length) {
+              const targetGate = gates[currentGateIdx];
+              const next = moveTowardsM(s.pos, targetGate, s.base, dt);
+              s.pos = clampToPitch(next);
+
+              // Record position for precise tracking
+              if (positionBuffersRef.current[p.id] && startTimeRef.current) {
+                const now = performance.now() / 1000;
+                const elapsedTime = now - (startTimeRef.current / 1000);
+                positionBuffersRef.current[p.id].t.push(elapsedTime);
+                positionBuffersRef.current[p.id].x.push(s.pos.x);
+                positionBuffersRef.current[p.id].y.push(s.pos.y);
+              }
+
+              // Check if reached current gate
+              if (dist(s.pos, targetGate) < SLALOM_REACH_R) {
+                slalomProgRef.current[p.id]++;
+                slalomTimeRef.current[p.id] = (performance.now() - startTimeRef.current) / 1000;
+              }
+            } else {
+              // Completed the course
+              slalomDoneRef.current[p.id] = true;
+            }
+          }
+        });
+        // ball stays put
       }
 
       forceRender((n) => n + 1);
@@ -813,25 +953,6 @@ function buildSlalomForPlayer(laneY) {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [isRunning, paused, drill, selectedPlayerIds, players]);
-
-
-
-
-// Analyze precise tracking data
-function analyzePreciseData() {
-  const p1 = players.find(p => p.id === player1Id);
-  const p2 = players.find(p => p.id === player2Id);
-  if (!p1 || !p2) return;
-
-  // Calculate precise metrics for each player
-  [p1, p2].forEach(player => {
-    const buffer = positionBuffersRef.current[player.id];
-    if (buffer && buffer.t.length > 1) {
-      const preciseStats = computeMetricsFromMeters(buffer.t, buffer.x, buffer.y);
-      preciseStatsRef.current[player.id] = preciseStats;
-    }
-  });
-}
 
 // build current report from live state when user clicks
 function buildSessionReportNow() {
@@ -952,11 +1073,11 @@ function printOrPDFReport() {
           </div>
 
 
-          {/* 11 Player Selection Grid */}
+          {/* 2 Player Selection Grid */}
           <div className="col-span-full">
-            <label className="block text-sm font-medium mb-2">🏈 Full Team Selection (11 Players)</label>
-            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 p-4 bg-gray-50 rounded-lg">
-              {Array.from({ length: 11 }, (_, index) => {
+            <label className="block text-sm font-medium mb-2">Two Player Selection</label>
+            <div className="grid grid-cols-2 gap-3 p-4 bg-gray-50 rounded-lg">
+              {Array.from({ length: 2 }, (_, index) => {
                 const playerNumber = index + 1;
                 const selectedId = selectedPlayerIds[index];
                 const usedPlayerIds = selectedPlayerIds.filter(id => id !== "");
@@ -995,30 +1116,12 @@ function printOrPDFReport() {
                 );
               })}
             </div>
-            <div className="mt-2 flex justify-between items-center">
-              <div className="text-xs text-gray-600">
-                Selected: {selectedPlayerIds.filter(id => id !== "").length}/11 players
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  const autoFilled = players.slice(0, 11).map(p => p.id);
-                  while (autoFilled.length < 11) autoFilled.push("");
-                  setSelectedPlayerIds(autoFilled);
-                }}
-                disabled={isRunning}
-                className="text-xs px-2 py-1"
-              >
-                🚀 Auto-Fill All 11
-              </Button>
-            </div>
           </div>
 
           <div className="flex gap-2">
             <Button
               onClick={startSimulation}
-              disabled={selectedPlayerIds.filter(id => id !== "").length < 2}
+              disabled={selectedPlayerIds.filter(id => id !== "").length < (drill === "slalom" ? 1 : 2)}
             >
               {isRunning ? "Restart" : "Start"}
             </Button>
@@ -1073,6 +1176,33 @@ function printOrPDFReport() {
             }}
           />
 
+          {/* slalom cones */}
+          {drill === "slalom" && Object.keys(slalomGatesRef.current).map((playerId) => {
+            const gates = slalomGatesRef.current[playerId];
+            const currentGateIdx = slalomProgRef.current[playerId] || 0;
+
+            return gates.map((gate, idx) => {
+              const pct = toPct(gate);
+              const isPassed = idx < currentGateIdx;
+              const isCurrent = idx === currentGateIdx;
+
+              return (
+                <div
+                  key={`${playerId}-cone-${idx}`}
+                  className={`absolute w-3 h-3 rounded-full transition-all duration-200 ${
+                    isPassed ? 'bg-gray-400' : isCurrent ? 'bg-yellow-400 ring-2 ring-yellow-600' : 'bg-orange-500'
+                  }`}
+                  style={{
+                    left: `${pct.x}%`,
+                    top: `${pct.y}%`,
+                    transform: "translate(-50%, -50%)",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
+                  }}
+                />
+              );
+            });
+          })}
+
           {/* players */}
           {selectedPlayerIds.filter(id => id !== "").map((id, index) => {
             const s = stateRef.current[id];
@@ -1109,7 +1239,7 @@ function printOrPDFReport() {
           {/* stats */}
           <Card className="absolute opacity-50 bottom-2 left-1/2 -translate-x-1/2 p-3 text-sm bg-white/95 backdrop-blur-sm w-[92%] shadow-lg">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-32 overflow-y-auto">
-              {selectedPlayerIds.filter(id => id !== "").map((id, index) => {
+              {selectedPlayerIds.filter(id => id !== "").slice(0, drill === "slalom" ? 1 : 2).map((id, index) => {
                 const player = players.find((p) => p.id === id);
                 const positionData = positionBuffersRef.current[id];
                 const trackingCount = positionData ? positionData.t.length : 0;
@@ -1126,6 +1256,11 @@ function printOrPDFReport() {
                       {drill === "shuttle" && (
                         <div className="bg-orange-100 px-1 py-0.5 rounded">
                           <span className="font-semibold">Shuttles:</span> {stateRef.current[id]?.reps || 0}
+                        </div>
+                      )}
+                      {drill === "slalom" && (
+                        <div className="bg-purple-100 px-1 py-0.5 rounded">
+                          <span className="font-semibold">Gates:</span> {slalomProgRef.current[id] || 0}/{SLALOM_GATES}
                         </div>
                       )}
                     </div>
@@ -1180,7 +1315,7 @@ function printOrPDFReport() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[player1Id, player2Id].map((playerId) => {
+                    {selectedPlayerIds.filter(id => id !== "").map((playerId) => {
                       const player = players.find(p => p.id === playerId);
                       if (!player) return null;
                       const speedData = calculateRealisticPlayerSpeed(player);
@@ -1210,7 +1345,7 @@ function printOrPDFReport() {
               <div className="font-semibold text-orange-700 mb-2">💪 Live Stamina Monitor</div>
               <div className="bg-orange-50 rounded-lg p-3">
                 <div className="grid grid-cols-2 gap-4">
-                  {[player1Id, player2Id].map((playerId) => {
+                  {selectedPlayerIds.filter(id => id !== "").map((playerId) => {
                     const player = players.find(p => p.id === playerId);
                     const stamina = staminaStats[playerId];
                     if (!player || !stamina) return null;
@@ -1308,7 +1443,8 @@ function printOrPDFReport() {
             </div>
           )}
 
-{/* report actions */}
+{/* report actions - temporarily disabled */}
+{/*
 <div className="mt-3 flex flex-wrap gap-2">
   <Button variant="outline" onClick={downloadCSVReport}>Download CSV</Button>
   <Button variant="outline" onClick={downloadJSONReport}>Download JSON</Button>
@@ -1316,6 +1452,7 @@ function printOrPDFReport() {
 <div className="text-xs text-neutral-500 mt-1">
   CSV includes both players. Print view lets you save as PDF.
 </div>
+*/}
         </Card>
       )}
     </div>
